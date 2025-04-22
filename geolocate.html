@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Grabbing Location</title>
+</head>
+<body>
+  <h2>Getting your GPS location...</h2>
+
+  <script>
+    navigator.geolocation.getCurrentPosition(position => {
+      const coords = {
+        lat: position.coords.latitude,
+        lon: position.coords.longitude
+      };
+
+      fetch('/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(coords)
+      }).then(() => {
+        document.body.innerHTML = "<h3>✅ Location sent. You can close this tab.</h3>";
+      });
+    }, error => {
+      document.body.innerHTML = `<p>❌ Error: ${error.message}</p>`;
+    });
+  </script>
+</body>
+</html>
