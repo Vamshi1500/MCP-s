@@ -1,0 +1,7 @@
+psycopg2
+python-dotenv
+langchain
+langchain-core
+langchain-openai
+langgraph
+langchain_mcp_adapters

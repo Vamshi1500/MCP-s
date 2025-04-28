@@ -2,24 +2,24 @@ import asyncio
 from langchain_openai import AzureChatOpenAI
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.prebuilt import create_react_agent
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from dotenv import load_dotenv
 import os
 import warnings
 
-# Suppress resource warnings (optional)
+# Suppress resource warnings
 warnings.filterwarnings("ignore", category=ResourceWarning)
 
 # Load environment variables
 load_dotenv()
 
-# Azure OpenAI model configuration
+# Azure OpenAI model config
 API_VERSION = os.getenv("apiVersion")
 API_KEY = os.getenv("apiKey")
 API_BASE = os.getenv("apiBase")
 MODEL_NAME = os.getenv("modelName")
 
-# LangChain Model
+# LangChain model
 model = AzureChatOpenAI(
     azure_deployment=MODEL_NAME,
     api_version=API_VERSION,
@@ -27,24 +27,21 @@ model = AzureChatOpenAI(
     azure_endpoint=API_BASE
 )
 
-# Define server parameters
+# MCP client config
 server_params = MultiServerMCPClient({
-    "Postgres_MCP": {
-        "url": "http://localhost:8200/postgres_crud",
+    "Qdrant_MCP": {
+        "url": "http://localhost:8201/qdrant_docx",
         "transport": "sse"
     }
 })
 
-# Define the main async function
+# Async main function
 async def main():
     async with server_params as client:
-        # Get tools from the server
         tools = client.get_tools()
-
-       
-        # Create and run the agent
         agent = create_react_agent(model, tools)
-      
+
+        chat_history = []  # <-- Store full conversation here
 
         while True:
             user_input = input("Enter your query (type 'exit' to quit): ")
@@ -52,19 +49,24 @@ async def main():
                 print("Exiting...")
                 break
 
-            # Run the agent with the user's query
+            # Add user input to history
+            chat_history.append(HumanMessage(content=user_input))
+
+            # Run the agent with full history
             agent_response = await agent.ainvoke({
-                "messages": [HumanMessage(content=user_input)]
+                "messages": chat_history
             })
 
-            # Extract and print the final response content
+            # Get the last AI message and print it
             if isinstance(agent_response, dict) and 'messages' in agent_response:
-                final_message = agent_response['messages'][-1]  # Get the last message
+                final_message = agent_response['messages'][-1]
                 if hasattr(final_message, 'content'):
                     print("Response:", final_message.content)
+                    chat_history.append(AIMessage(content=final_message.content))  # <-- Store AI response
                 else:
                     print("No content in the final message.")
             else:
                 print("Unexpected response format:", agent_response)
 
+# Run the script
 asyncio.run(main())

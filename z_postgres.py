@@ -11,7 +11,7 @@ def create_postgres_db(
     db_name: Annotated[str, "Name of the database to create"]
 ) -> str:
     """Create a PostgreSQL database with the provided name.
-    Example: create_postgres_db {db_name}"""
+    Example: create a postgres_db {db_name}"""
     try:
         conn = psycopg2.connect(
             dbname="postgres",  # use existing database to create others
@@ -35,6 +35,12 @@ current_db = {"name": "postgres"}
 def value_of_current_db() -> str:
     """Get the name of the current database."""
     return f"Current database is: {current_db['name']}"
+
+@mcp.tool()
+def disconnect_from_current_db() -> str:
+    """Disconnect from the database."""
+    current_db["name"] = "postgres"
+    return f"Disconnected from current database {current_db['name']}"
 
 @mcp.tool()
 def connect_to_postgres_db(
@@ -62,6 +68,31 @@ def connect_to_postgres_db(
         return f"Successfully connected to the database '{db_name}'."
     except Exception as e:
         return f"Failed to connect to database: {e}"
+    
+@mcp.tool()
+def delete_postgres_db(
+    db_name: Annotated[str, "Name of the database to create"]
+) -> str:
+    """Create a PostgreSQL database with the provided name.
+    Example: create a postgres_db {db_name}"""
+    try:
+        conn = psycopg2.connect(
+            dbname="postgres",  # use existing database to create others
+            user="postgres",
+            password="12345",
+            host="localhost",
+            port="5432"
+        )
+        conn.autocommit = True
+        cur = conn.cursor()
+        cur.execute(f"DROP DATABASE IF EXISTS {db_name} WITH FORCE")
+        cur.close()
+        conn.close()
+        return f"Database '{db_name}' has been deleted"
+    except Exception as e:
+        return f"Failed to delete the database: {e}"
+    
+current_db = {"name": "postgres"} 
 
 @mcp.tool() # create a table in the current database
 def create_postgres_table(
@@ -157,40 +188,6 @@ def delete_postgres_table(
     except Exception as e:
         return f"Failed to create table: {e}"
 
-@mcp.tool()
-def insert_into_table(
-    table_name: Annotated[str, "Name of the table to insert data into"],
-    values: Annotated[dict, "Key-value pairs of columns and their values to insert"]
-) -> str:
-    """
-    Insert a row into the table {table_name} in the current database ({current_db['name']})
-    using provided column-value pairs.
-    Example: insert row into users {'name': 'Alice', 'email': 'alice@example.com'}
-    """
-    try:
-        conn = psycopg2.connect(
-            dbname=current_db["name"],
-            user="postgres",
-            password="12345",
-            host="localhost",
-            port="5432"
-        )
-        conn.autocommit = True
-        cur = conn.cursor()
-
-        # Prepare query
-        columns = ', '.join(values.keys())
-        placeholders = ', '.join(['%s'] * len(values))
-        query = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders})"
-        cur.execute(query, list(values.values()))
-
-        cur.close()
-        conn.close()
-        return f"Inserted row into '{table_name}' in database '{current_db['name']}'."
-
-    except Exception as e:
-        return f"Failed to insert row: {e}"
-    
 @mcp.tool()
 def insert_into_table(
     table_name: Annotated[str, "Name of the table to insert data into"],
@@ -486,7 +483,134 @@ def get_record_with_nth_highest_value(
     except Exception as e:
         return f"Error: {e}"
 
+@mcp.tool() # case-insensitive search (ILIKE)
+def search_records_ilike(
+    table_name: Annotated[str, "Name of the table to search in"],
+    column_name: Annotated[str, "Column to apply the ILIKE search on"],
+    pattern: Annotated[str, "Pattern to match (e.g., '%john%')"]
+) -> str:
+    """
+    Search for records in table `{table_name}` where column `{column_name}` matches the pattern `{pattern}` using ILIKE (case-insensitive).
+    Example: search_records_ilike employees name '%john%'
+    """
+    try:
+        conn = psycopg2.connect(
+            dbname=current_db["name"],
+            user="postgres",
+            password="12345",
+            host="localhost",
+            port="5432"
+        )
+        cur = conn.cursor()
 
+        query = f"SELECT * FROM {table_name} WHERE {column_name} ILIKE %s"
+        cur.execute(query, (pattern,))
+        rows = cur.fetchall()
+
+        cur.close()
+        conn.close()
+
+        if not rows:
+            return f"No records found in '{table_name}' where '{column_name}' ILIKE '{pattern}'."
+
+        return f"Found {len(rows)} matching record(s):\n" + "\n".join(str(row) for row in rows)
+
+    except Exception as e:
+        return f"Error: {e}"
+    
+@mcp.tool()
+def apply_aggregate_function(
+    table_name: Annotated[str, "Name of the table to query"],
+    column_name: Annotated[str, "Name of the column to apply the aggregate function on"],
+    function_name: Annotated[str, "Aggregate function (e.g., SUM, AVG, MIN, MAX, COUNT)"]
+) -> str:
+    """
+    Apply aggregate function `{function_name}` on column `{column_name}` in table `{table_name}`.
+    Example usage:
+    1. What is the AVG of salary in employees?
+    2. Show the SUM of all order_amount in orders table.
+    3. What's the MAX value in sales_price column?
+    """
+    try:
+        conn = psycopg2.connect(
+            dbname=current_db["name"],
+            user="postgres",
+            password="12345",
+            host="localhost",
+            port="5432"
+        )
+        cur = conn.cursor()
+
+        # Validate function to prevent SQL injection
+        valid_functions = {"SUM", "AVG", "MIN", "MAX", "COUNT"}
+        if function_name.upper() not in valid_functions:
+            return f"Invalid function '{function_name}'. Use one of: {', '.join(valid_functions)}"
+
+        query = f"SELECT {function_name.upper()}({column_name}) FROM {table_name}"
+        cur.execute(query)
+        result = cur.fetchone()
+
+        cur.close()
+        conn.close()
+
+        return f"{function_name.upper()} of '{column_name}' in '{table_name}' is: {result[0]}"
+
+    except Exception as e:
+        return f"Error: {e}"
+
+@mcp.tool()
+def group_by_aggregate(
+    table_name: Annotated[str, "Name of the table to query"],
+    group_by_column: Annotated[str, "Column name to group by"],
+    aggregate_column: Annotated[str, "Column to apply the aggregate function on"],
+    function_name: Annotated[str, "Aggregate function (e.g., SUM, AVG, COUNT, MIN, MAX)"]
+) -> str:
+    """
+    Group rows in table {table_name} by column {group_by_column} and apply the aggregate function {function_name}
+    on column {aggregate_column}.
+
+    Example:
+    - Show the total sales per region
+    - Get average salary per department
+    - Count users per role
+
+    Supported functions: SUM, AVG, COUNT, MIN, MAX
+    """
+    try:
+        conn = psycopg2.connect(
+            dbname=current_db["name"],
+            user="postgres",
+            password="12345",
+            host="localhost",
+            port="5432"
+        )
+        cur = conn.cursor()
+
+        valid_functions = {"SUM", "AVG", "COUNT", "MIN", "MAX"}
+        if function_name.upper() not in valid_functions:
+            return f"Invalid function '{function_name}'. Use one of: {', '.join(valid_functions)}"
+
+        query = f"""
+            SELECT {group_by_column}, {function_name.upper()}({aggregate_column})
+            FROM {table_name}
+            GROUP BY {group_by_column}
+            ORDER BY {group_by_column}
+        """
+
+        cur.execute(query)
+        results = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        if not results:
+            return "No results found."
+
+        # Format results for readability
+        formatted = "\n".join(f"{row[0]}: {row[1]}" for row in results)
+        return f" {function_name.upper()} of '{aggregate_column}' grouped by '{group_by_column}':\n{formatted}"
+
+    except Exception as e:
+        return f" Error: {e}"
 
 # Start MCP server
 if __name__ == "__main__":
