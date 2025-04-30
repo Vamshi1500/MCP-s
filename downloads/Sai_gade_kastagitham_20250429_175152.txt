@@ -1,0 +1,25 @@
+LOP: 0
+Earnings Full Actual Deductions Actual
+BASIC 10000 9355 PF 1123
+HRA 4000 3742 ESI 141
+CITY COMMAN ALLOWANCE 1200 1123 PROF TAX 150
+SPECIAL ALLOWANCE 4800 4490
+Total Earnings:INR. 20000 18710 Total Deductions:INR. 1414
+Net Pay for the month ( Total Earnings - Total Deductions): 17296
+(Rupees Seventeen Thousand Two Hundred Ninety Six Only)
+This is a system generated payslip and does not require signature.
+Print Date:07 Apr 2025, 11:44 AM
+
+AIFA LABS PRIVATE LIMITED
+"Suite 301, Modern Profound Techpark,
+Whitefield Road, Kondapur
+Hyderabad 
+Payslip for the month of March 2025
+Name: Veera Venkata Sai Employee No: AL120
+Manikyacharyulu Agarthi
+Joining Date: 03 Mar 2025 Bank Name: HDFC Bank
+Designation: Software Engineer - I Bank Account No: 50100785579070
+Department: IT PAN Number: EZOPA6901B
+Location: Hyderabad PF No: AP/HYD/2685170/000/0010116
+Effective Work Days: 29 PF UAN: 102180685705
+LOP: 0

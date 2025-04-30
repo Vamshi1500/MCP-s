@@ -9,9 +9,11 @@ import pdfplumber
 from docx import Document as DocxDocument
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 import traceback
-from fastapi.responses import FileResponse
-from fastapi import HTTPException
 import datetime
+import tempfile
+import json
+import threading
+import time
 
 # Create MCP instance
 mcp = FastMCP("Qdrant_MCP")
@@ -397,82 +399,104 @@ def list_collections_with_documents() -> dict:
         print(traceback.format_exc())
         return {"error": f"Error listing collections: {str(e)}"}
 
-# next mcps for download any file in its native format from Qdrant
-
-import tempfile
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
-from docx import Document as DocxDocument
-
-# Download API Router
-router = APIRouter()
+# @mcp.tool()
+# def download_document(
+#     document_name: Annotated[str, "Name of the document to download"],
+#     collection_name: Annotated[str, "Name of the Qdrant collection"],
+#     output_format: Annotated[str, "Output format (txt, docx)"] = "txt"
+# ) -> str:
+#     """
+#     Extracts document content from Qdrant and returns it directly.
+    
+#     This simplified version doesn't use the download URL approach,
+#     but instead directly returns the document content.
+#     """
+#     try:
+#         # Initialize Qdrant client
+#         qdrant_client = QdrantClient(
+#             url=os.getenv("QDRANT_URL"),
+#             api_key=os.getenv("QDRANT_API_KEY")
+#         )
+        
+#         # Define filter for the specific document
+#         document_filter = Filter(
+#             must=[
+#                 FieldCondition(
+#                     key="document_name", 
+#                     match=MatchValue(value=document_name)
+#                 )
+#             ]
+#         )
+        
+#         # Scroll through all points with this document name
+#         results = qdrant_client.scroll(
+#             collection_name=collection_name,
+#             scroll_filter=document_filter,
+#             limit=10000,  # High limit to get all chunks
+#             with_payload=True,  # Get the full payload including text
+#             with_vectors=False  # No need for vectors
+#         )[0]
+        
+#         if not results:
+#             return f"No content found for document '{document_name}' in collection '{collection_name}'."
+        
+#         # Extract text from each chunk and join them
+#         chunks = []
+#         for point in results:
+#             if point.payload and "text" in point.payload:
+#                 chunks.append(point.payload["text"])
+        
+#         # Join all chunks with double newlines
+#         full_content = "\n\n".join(chunks)
+        
+#         if not full_content:
+#             return f"Document '{document_name}' exists but contains no text."
+        
+#         # Create a temporary file to store the content
+#         os.makedirs("./downloads", exist_ok=True)
+#         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+#         base_name = os.path.splitext(document_name)[0]
+        
+#         if output_format == "docx":
+#             output_path = f"./downloads/{base_name}_{timestamp}.docx"
+#             # Create a DOCX file
+#             doc = DocxDocument()
+#             # Split by double newlines to create paragraphs
+#             paragraphs = full_content.split("\n\n")
+#             for para in paragraphs:
+#                 if para.strip():  # Skip empty paragraphs
+#                     doc.add_paragraph(para)
+#             doc.save(output_path)
+#             file_type = "DOCX"
+#         else:
+#             # Default to TXT
+#             output_path = f"./downloads/{base_name}_{timestamp}.txt"
+#             with open(output_path, "w", encoding="utf-8") as f:
+#                 f.write(full_content)
+#             file_type = "TXT"
+            
+#         return f"Document '{document_name}' has been exported to {file_type} format at: {output_path}"
+        
+#     except Exception as e:
+#         print(f"Error in download_document: {str(e)}")
+#         print(traceback.format_exc())
+#         return f"Error exporting document: {str(e)}"
 
 @mcp.tool()
 def download_document(
     document_name: Annotated[str, "Name of the document to download"],
     collection_name: Annotated[str, "Name of the Qdrant collection"],
-    output_format: Annotated[str, "Output format (original, txt, docx)"] = "original"
+    output_format: Annotated[str, "Output format (txt, docx)"] = "txt",
+    output_path: Annotated[str, "Custom output directory path (optional)"] = None
 ) -> str:
     """
-    Returns a download URL for the document in the requested format.
+    Extracts document content from Qdrant and saves it to the specified location.
     
-    This tool prepares a document for download and returns a URL that can be used
-    to download the document in its original or converted format.
+    If output_path is provided, document will be saved to that location.
+    Otherwise, it will use the default './downloads' directory.
     """
     try:
-        # Sanitize inputs for URL path
-        safe_collection = collection_name.replace("/", "_").replace("\\", "_")
-        safe_document = document_name.replace("/", "_").replace("\\", "_")
-        
-        # Generate a unique token for this download
-        download_token = str(uuid4())
-        
-        # Store the download request in a temporary file
-        os.makedirs("./temp_downloads", exist_ok=True)
-        with open(f"./temp_downloads/{download_token}.json", "w") as f:
-            import json
-            json.dump({
-                "document_name": document_name,
-                "collection_name": collection_name,
-                "output_format": output_format,
-                "created_at": str(datetime.datetime.now())
-            }, f)
-        
-        # Generate download URL
-        base_url = os.getenv("MCP_BASE_URL", "http://localhost:8201")  # Get from env or use default
-        download_url = f"{base_url}/api/download/{download_token}"
-        
-        return f"Download your document using this URL (valid for 1 hour): {download_url}"
-        
-    except Exception as e:
-        print(f"Error in download_document: {str(e)}")
-        print(traceback.format_exc())
-        return f"Error preparing download: {str(e)}"
-
-# Add the download endpoint
-@router.get("/api/download/{token}")
-async def serve_document_download(token: str):
-    """Endpoint to download a document using a generated token."""
-    try:
-        # Check if the token exists
-        token_file = f"./temp_downloads/{token}.json"
-        if not os.path.exists(token_file):
-            raise HTTPException(status_code=404, detail="Download link expired or invalid")
-        
-        # Read the download request
-        with open(token_file, "r") as f:
-            import json
-            download_info = json.loads(f.read())
-        
-        document_name = download_info["document_name"]
-        collection_name = download_info["collection_name"]
-        output_format = download_info["output_format"]
-        
-        # Retrieve the document content from Qdrant
         # Initialize Qdrant client
-        from qdrant_client import QdrantClient
-        from qdrant_client.http.models import Filter, FieldCondition, MatchValue
-        
         qdrant_client = QdrantClient(
             url=os.getenv("QDRANT_URL"),
             api_key=os.getenv("QDRANT_API_KEY")
@@ -482,7 +506,7 @@ async def serve_document_download(token: str):
         document_filter = Filter(
             must=[
                 FieldCondition(
-                    key="document_name",
+                    key="document_name", 
                     match=MatchValue(value=document_name)
                 )
             ]
@@ -498,10 +522,7 @@ async def serve_document_download(token: str):
         )[0]
         
         if not results:
-            raise HTTPException(
-                status_code=404, 
-                detail=f"No content found for document '{document_name}' in collection '{collection_name}'"
-            )
+            return f"No content found for document '{document_name}' in collection '{collection_name}'."
         
         # Extract text from each chunk and join them
         chunks = []
@@ -513,117 +534,78 @@ async def serve_document_download(token: str):
         full_content = "\n\n".join(chunks)
         
         if not full_content:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Document '{document_name}' exists but contains no text"
-            )
+            return f"Document '{document_name}' exists but contains no text."
         
-        # Create temporary file for the document
-        with tempfile.TemporaryDirectory() as temp_dir:
-            # Determine output filename and format
-            base_name, ext = os.path.splitext(document_name)
+        # Determine the output directory path
+        if output_path:
+            # Use the provided output path
+            output_dir = output_path
+        else:
+            # Use the default download directory
+            output_dir = "./downloads"
+            os.makedirs(output_dir, exist_ok=True)
+        
+        # Ensure the output directory exists
+        if not os.path.exists(output_dir):
+            return f"Error: Output directory '{output_dir}' does not exist."
+        
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        base_name = os.path.splitext(document_name)[0]
+        
+        if output_format.lower() == "docx":
+            file_path = os.path.join(output_dir, f"{base_name}_{timestamp}.docx")
+            # Create a DOCX file
+            doc = DocxDocument()
+            # Split by double newlines to create paragraphs
+            paragraphs = full_content.split("\n\n")
+            for para in paragraphs:
+                if para.strip():  # Skip empty paragraphs
+                    doc.add_paragraph(para)
+            doc.save(file_path)
+            file_type = "DOCX"
+        else:
+            # Default to TXT
+            file_path = os.path.join(output_dir, f"{base_name}_{timestamp}.txt")
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(full_content)
+            file_type = "TXT"
             
-            if output_format == "original":
-                output_ext = ext
-            else:
-                output_ext = f".{output_format}"
-            
-            output_filename = f"{base_name}{output_ext}"
-            output_path = os.path.join(temp_dir, output_filename)
-            
-            # Write the content to the file in the appropriate format
-            if output_ext == ".txt" or output_format == "txt":
-                with open(output_path, "w", encoding="utf-8") as f:
-                    f.write(full_content)
-            elif output_ext == ".docx" or output_format == "docx":
-                doc = DocxDocument()
-                # Split by double newlines to create paragraphs
-                paragraphs = full_content.split("\n\n")
-                for para in paragraphs:
-                    if para.strip():  # Skip empty paragraphs
-                        doc.add_paragraph(para)
-                doc.save(output_path)
-            elif output_ext == ".pdf" or output_format == "pdf":
-                # PDF creation requires reportlab
-                try:
-                    from reportlab.lib.pagesizes import letter
-                    from reportlab.platypus import SimpleDocTemplate, Paragraph
-                    from reportlab.lib.styles import getSampleStyleSheet
-                    
-                    doc = SimpleDocTemplate(output_path, pagesize=letter)
-                    styles = getSampleStyleSheet()
-                    paragraphs = full_content.split("\n\n")
-                    story = [Paragraph(para.replace("\n", "<br/>"), styles["Normal"]) 
-                            for para in paragraphs if para.strip()]
-                    doc.build(story)
-                except ImportError:
-                    # If reportlab is not available, fallback to text
-                    output_filename = f"{base_name}.txt"
-                    output_path = os.path.join(temp_dir, output_filename)
-                    with open(output_path, "w", encoding="utf-8") as f:
-                        f.write(full_content)
-            else:
-                # Default to text for unsupported formats
-                output_filename = f"{base_name}.txt"
-                output_path = os.path.join(temp_dir, output_filename)
-                with open(output_path, "w", encoding="utf-8") as f:
-                    f.write(full_content)
-            
-            # Return the file
-            return FileResponse(
-                path=output_path,
-                filename=output_filename,
-                media_type="application/octet-stream"
-            )
-    
+        return f"Document '{document_name}' has been exported to {file_type} format at: {file_path}"
+        
     except Exception as e:
-        print(f"Download error: {str(e)}")
+        print(f"Error in download_document: {str(e)}")
         print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Download failed: {str(e)}")
-    finally:
-        # Clean up the token file
+        return f"Error exporting document: {str(e)}"
+
+# Function to clean up old download files (runs in a separate thread)
+def cleanup_old_downloads():
+    """Thread function to periodically clean up old download files."""
+    while True:
         try:
-            if os.path.exists(token_file):
-                os.remove(token_file)
-        except:
-            pass
+            # Check for old download files (older than 1 day)
+            now = datetime.datetime.now()
+            if os.path.exists("./downloads"):
+                for filename in os.listdir("./downloads"):
+                    file_path = os.path.join("./downloads", filename)
+                    file_age = now - datetime.datetime.fromtimestamp(os.path.getmtime(file_path))
+                    if file_age > datetime.timedelta(days=1):
+                        try:
+                            os.remove(file_path)
+                            print(f"Removed old download file: {filename}")
+                        except:
+                            pass
+        except Exception as e:
+            print(f"Error in cleanup_old_downloads: {str(e)}")
+        
+        # Sleep for 1 hour before checking again
+        time.sleep(3600)
 
-# Add the router to the FastAPI app
-mcp.app.include_router(router)
+# Start the cleanup thread
+cleanup_thread = threading.Thread(target=cleanup_old_downloads, daemon=True)
+cleanup_thread.start()
+print("Started cleanup thread for old downloads")
 
-# Add the cleanup function to remove expired tokens
-@mcp.on_startup
-async def cleanup_expired_tokens():
-    """Clean up expired download tokens."""
-    import datetime
-    import asyncio
-    
-    async def cleanup_task():
-        while True:
-            try:
-                # Check for expired tokens (older than 1 hour)
-                now = datetime.datetime.now()
-                if os.path.exists("./temp_downloads"):
-                    for filename in os.listdir("./temp_downloads"):
-                        if filename.endswith(".json"):
-                            file_path = os.path.join("./temp_downloads", filename)
-                            file_age = now - datetime.datetime.fromtimestamp(os.path.getmtime(file_path))
-                            if file_age > datetime.timedelta(hours=1):
-                                try:
-                                    os.remove(file_path)
-                                    print(f"Removed expired token file: {filename}")
-                                except:
-                                    pass
-            except Exception as e:
-                print(f"Error in cleanup_task: {str(e)}")
-            
-            # Sleep for 15 minutes before checking again
-            await asyncio.sleep(15 * 60)
-    
-    # Start the cleanup task in the background
-    asyncio.create_task(cleanup_task())
-
-# Make FastAPI app available to MCP
+# Run the MCP server
 if __name__ == "__main__":
     mcp.settings.port = 8201  # You can change the port if needed
     mcp.settings.sse_path = "/qdrant_docx"  # Endpoint path for testing connection

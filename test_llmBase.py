@@ -30,7 +30,7 @@ model = AzureChatOpenAI(
 # MCP client config
 server_params = MultiServerMCPClient({
     "Qdrant_MCP": {
-        "url": "http://localhost:8201/qdrant_docx",
+        "url": "http://localhost:8202/sentiment_analysis",
         "transport": "sse"
     }
 })

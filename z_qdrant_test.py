@@ -327,3 +327,76 @@ if __name__ == "__main__":
     mcp.settings.port = 8201  # You can change the port if needed
     mcp.settings.sse_path = "/qdrant_docx"  # Endpoint path for testing connection
     mcp.run(transport="sse")
+
+
+# DOWNLOAD_DIR = "download_files"
+# os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+
+# # This function will create a file from Qdrant content when needed
+# def create_file_from_qdrant(collection_name, document_name):
+#     file_path = os.path.join(DOWNLOAD_DIR, f"{collection_name}_{document_name}")
+    
+#     try:
+#         # Initialize Qdrant client
+#         qdrant_client = QdrantClient(
+#             url=os.getenv("QDRANT_URL"),
+#             api_key=os.getenv("QDRANT_API_KEY")
+#         )
+        
+#         # Define filter for the specific document
+#         document_filter = Filter(
+#             must=[
+#                 FieldCondition(
+#                     key="document_name",
+#                     match=MatchValue(value=document_name)
+#                 )
+#             ]
+#         )
+        
+#         # Get document content
+#         results = qdrant_client.scroll(
+#             collection_name=collection_name,
+#             scroll_filter=document_filter,
+#             limit=10000,
+#             with_payload=True,
+#             with_vectors=False
+#         )[0]
+        
+#         if not results:
+#             return None
+        
+#         # Extract text chunks and combine
+#         chunks = []
+#         for point in results:
+#             if "text" in point.payload:
+#                 chunks.append(point.payload["text"])
+        
+#         # Write to file
+#         with open(file_path, 'w', encoding='utf-8') as f:
+#             f.write("\n\n".join(chunks))
+        
+#         return file_path
+#     except Exception as e:
+#         print(f"Error creating file: {str(e)}")
+#         traceback.print_exc()
+#         return None
+
+# @mcp.tool()
+# def download_document(
+#     document_name: Annotated[str, "Name of document to download"],
+#     collection_name: Annotated[str, "Name of the collection containing the document"]
+# ) -> str:
+#     """Creates a downloadable file from document content in Qdrant."""
+    
+#     try:
+#         # Create the file
+#         file_path = create_file_from_qdrant(collection_name, document_name)
+        
+#         if not file_path or not os.path.exists(file_path):
+#             return f"Document '{document_name}' not found in collection '{collection_name}' or couldn't be processed."
+        
+#         # Return success with the file path
+#         return f"Document created successfully and saved at: {file_path}\n\nYou can access this file directly on the server."
+    
+#     except Exception as e:
+#         return f"Error downloading document: {str(e)}"
