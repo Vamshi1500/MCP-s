@@ -572,8 +572,9 @@ def download_document(
         return f"Error exporting document: {str(e)}"
 
 
+
 # Run the MCP server
 if __name__ == "__main__":
-    mcp.settings.port = 8201  # You can change the port if needed
-    mcp.settings.sse_path = "/qdrant_docx"  # Endpoint path for testing connection
+    mcp.settings.port = 8201  
+    mcp.settings.sse_path = "/qdrant_docx" 
     mcp.run(transport="sse")
