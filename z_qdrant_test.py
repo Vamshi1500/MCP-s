@@ -400,3 +400,31 @@ if __name__ == "__main__":
     
 #     except Exception as e:
 #         return f"Error downloading document: {str(e)}"
+
+# Function to clean up old download files (runs in a separate thread)
+def cleanup_old_downloads():
+    """Thread function to periodically clean up old download files."""
+    while True:
+        try:
+            # Check for old download files (older than 1 day)
+            now = datetime.datetime.now()
+            if os.path.exists("./downloads"):
+                for filename in os.listdir("./downloads"):
+                    file_path = os.path.join("./downloads", filename)
+                    file_age = now - datetime.datetime.fromtimestamp(os.path.getmtime(file_path))
+                    if file_age > datetime.timedelta(days=1):
+                        try:
+                            os.remove(file_path)
+                            print(f"Removed old download file: {filename}")
+                        except:
+                            pass
+        except Exception as e:
+            print(f"Error in cleanup_old_downloads: {str(e)}")
+        
+        # Sleep for 1 hour before checking again
+        time.sleep(3600)
+
+# Start the cleanup thread
+cleanup_thread = threading.Thread(target=cleanup_old_downloads, daemon=True)
+cleanup_thread.start()
+print("Started cleanup thread for old downloads")

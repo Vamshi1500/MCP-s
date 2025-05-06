@@ -14,6 +14,7 @@ import tempfile
 import json
 import threading
 import time
+import speech_recognition as sr
 
 # Create MCP instance
 mcp = FastMCP("Qdrant_MCP")
@@ -125,16 +126,15 @@ def upsert_chunks_to_qdrant(
     """Upserts text chunks into a Qdrant collection, tagging each chunk with the document name."""
 
     try:
-        # Initialize the Qdrant client with environment config
         qdrant_client = QdrantClient(
             url=os.getenv("QDRANT_URL"),
             api_key=os.getenv("QDRANT_API_KEY")
         )
 
-        # Prepare list of PointStructs with tagged payloads
+        # list of PointStructs with payloads
         points = []
         for chunk in chunks:
-            vector = encode_text(chunk)  # Placeholder or real embedding
+            vector = encode_text(chunk) 
             points.append(PointStruct(
                 id=str(uuid4()),
                 vector=vector,
@@ -162,7 +162,6 @@ def list_documents_in_collection(
     """Lists all unique document names in a collection."""
     
     try:
-        # Initialize Qdrant client
         qdrant_client = QdrantClient(
             url=os.getenv("QDRANT_URL"),
             api_key=os.getenv("QDRANT_API_KEY")
@@ -174,9 +173,9 @@ def list_documents_in_collection(
             limit=10000,
             with_payload=["document_name"],
             with_vectors=False
-        )[0]  # First element is list of points, second is next page offset
+        )[0]
         
-        # Extract unique document names
+        # Gives unique document names
         document_names = set()
         for point in results:
             doc_name = point.payload.get("document_name")
@@ -259,10 +258,8 @@ def semantic_search(
             api_key=os.getenv("QDRANT_API_KEY")
         )
         
-        # Generate embedding for the query (placeholder)
         query_vector = encode_text(query)
         
-        # Perform semantic search
         results = qdrant_client.search(
             collection_name=collection_name,
             query_vector=query_vector,
@@ -329,7 +326,6 @@ def delete_qdrant_collection(
     """Deletes an entire collection from Qdrant."""
     
     try:
-        # Initialize Qdrant client
         qdrant_client = QdrantClient(
             url=os.getenv("QDRANT_URL"),
             api_key=os.getenv("QDRANT_API_KEY")
@@ -353,7 +349,6 @@ def list_collections_with_documents() -> dict:
     """Lists all collections in the Qdrant database along with documents in each collection."""
     
     try:
-        # Initialize Qdrant client
         qdrant_client = QdrantClient(
             url=os.getenv("QDRANT_URL"),
             api_key=os.getenv("QDRANT_API_KEY")
@@ -366,10 +361,10 @@ def list_collections_with_documents() -> dict:
         if not collection_names:
             return {"status": "No collections found."}
         
-        # Create a dictionary to store collection -> documents mapping
+        # Create a dictionary to store collection 
         collections_with_documents = {}
         
-        # For each collection, get the unique document names
+        # For each collection gets the unique document names
         for collection_name in collection_names:
             try:
                 # Scroll through collection to find all document names
@@ -512,13 +507,12 @@ def download_document(
             ]
         )
         
-        # Scroll through all points with this document name
         results = qdrant_client.scroll(
             collection_name=collection_name,
             scroll_filter=document_filter,
-            limit=10000,  # High limit to get all chunks
-            with_payload=True,  # Get the full payload including text
-            with_vectors=False  # No need for vectors
+            limit=10000,  
+            with_payload=True,  
+            with_vectors=False  
         )[0]
         
         if not results:
@@ -577,33 +571,6 @@ def download_document(
         print(traceback.format_exc())
         return f"Error exporting document: {str(e)}"
 
-# Function to clean up old download files (runs in a separate thread)
-def cleanup_old_downloads():
-    """Thread function to periodically clean up old download files."""
-    while True:
-        try:
-            # Check for old download files (older than 1 day)
-            now = datetime.datetime.now()
-            if os.path.exists("./downloads"):
-                for filename in os.listdir("./downloads"):
-                    file_path = os.path.join("./downloads", filename)
-                    file_age = now - datetime.datetime.fromtimestamp(os.path.getmtime(file_path))
-                    if file_age > datetime.timedelta(days=1):
-                        try:
-                            os.remove(file_path)
-                            print(f"Removed old download file: {filename}")
-                        except:
-                            pass
-        except Exception as e:
-            print(f"Error in cleanup_old_downloads: {str(e)}")
-        
-        # Sleep for 1 hour before checking again
-        time.sleep(3600)
-
-# Start the cleanup thread
-cleanup_thread = threading.Thread(target=cleanup_old_downloads, daemon=True)
-cleanup_thread.start()
-print("Started cleanup thread for old downloads")
 
 # Run the MCP server
 if __name__ == "__main__":
