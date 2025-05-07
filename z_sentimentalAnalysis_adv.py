@@ -18,6 +18,10 @@ from pydub import AudioSegment
 import speech_recognition as sr
 import tempfile
 
+API_VERSION = os.getenv("apiVersion")
+API_KEY = os.getenv("apiKey")
+API_BASE = os.getenv("apiBase")
+MODEL_NAME = os.getenv("modelName")
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -483,10 +487,10 @@ def analyze_call_context_with_llm(text):
         
         # Initialize the Azure client using LangChain
         model = AzureChatOpenAI(
-            azure_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME"),
-            api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
-            openai_api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-            azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")
+            azure_deployment=MODEL_NAME,
+            api_version=API_VERSION,
+            openai_api_key=API_KEY,
+            azure_endpoint=API_BASE
         )
         
         # Create a prompt for sentiment analysis
