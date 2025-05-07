@@ -7,6 +7,11 @@ import re
 from statistics import mean
 import traceback
 import logging
+from typing_extensions import Annotated, List
+import os
+import docx
+import pdfplumber
+import traceback
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -183,12 +188,6 @@ def batch_analyze_sentiment(
         logger.error(error_msg)
         return [{"error": error_msg}]
     
-from typing_extensions import Annotated, List
-import os
-import docx
-import pdfplumber
-import traceback
-
 # Add these imports to your existing imports
 # No need to duplicate existing imports like FastMCP, pipeline, etc.
 
@@ -384,13 +383,9 @@ def analyze_document_content_from_qdrant(
         logger.error(f"{error_msg}\n{traceback.format_exc()}")
         return {"error": error_msg}
 
+
+
 if __name__ == "__main__":
-    print("\n=== Sentiment Analysis MCP Server ===")
-    print("Server name: Qdrant_MCP (to match client configuration)")
-    print("Endpoint: /sentiment_analysis")
-    print("Port: 8202")
-    print("Detailed logs enabled")
-    print("=======================================\n")
     
     mcp.settings.port = 8202
     mcp.settings.sse_path = "/sentiment_analysis"

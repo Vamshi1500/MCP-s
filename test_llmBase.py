@@ -68,5 +68,4 @@ async def main():
             else:
                 print("Unexpected response format:", agent_response)
 
-# Run the script
 asyncio.run(main())

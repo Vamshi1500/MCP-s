@@ -394,88 +394,7 @@ def list_collections_with_documents() -> dict:
         print(traceback.format_exc())
         return {"error": f"Error listing collections: {str(e)}"}
 
-# @mcp.tool()
-# def download_document(
-#     document_name: Annotated[str, "Name of the document to download"],
-#     collection_name: Annotated[str, "Name of the Qdrant collection"],
-#     output_format: Annotated[str, "Output format (txt, docx)"] = "txt"
-# ) -> str:
-#     """
-#     Extracts document content from Qdrant and returns it directly.
-    
-#     This simplified version doesn't use the download URL approach,
-#     but instead directly returns the document content.
-#     """
-#     try:
-#         # Initialize Qdrant client
-#         qdrant_client = QdrantClient(
-#             url=os.getenv("QDRANT_URL"),
-#             api_key=os.getenv("QDRANT_API_KEY")
-#         )
-        
-#         # Define filter for the specific document
-#         document_filter = Filter(
-#             must=[
-#                 FieldCondition(
-#                     key="document_name", 
-#                     match=MatchValue(value=document_name)
-#                 )
-#             ]
-#         )
-        
-#         # Scroll through all points with this document name
-#         results = qdrant_client.scroll(
-#             collection_name=collection_name,
-#             scroll_filter=document_filter,
-#             limit=10000,  # High limit to get all chunks
-#             with_payload=True,  # Get the full payload including text
-#             with_vectors=False  # No need for vectors
-#         )[0]
-        
-#         if not results:
-#             return f"No content found for document '{document_name}' in collection '{collection_name}'."
-        
-#         # Extract text from each chunk and join them
-#         chunks = []
-#         for point in results:
-#             if point.payload and "text" in point.payload:
-#                 chunks.append(point.payload["text"])
-        
-#         # Join all chunks with double newlines
-#         full_content = "\n\n".join(chunks)
-        
-#         if not full_content:
-#             return f"Document '{document_name}' exists but contains no text."
-        
-#         # Create a temporary file to store the content
-#         os.makedirs("./downloads", exist_ok=True)
-#         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-#         base_name = os.path.splitext(document_name)[0]
-        
-#         if output_format == "docx":
-#             output_path = f"./downloads/{base_name}_{timestamp}.docx"
-#             # Create a DOCX file
-#             doc = DocxDocument()
-#             # Split by double newlines to create paragraphs
-#             paragraphs = full_content.split("\n\n")
-#             for para in paragraphs:
-#                 if para.strip():  # Skip empty paragraphs
-#                     doc.add_paragraph(para)
-#             doc.save(output_path)
-#             file_type = "DOCX"
-#         else:
-#             # Default to TXT
-#             output_path = f"./downloads/{base_name}_{timestamp}.txt"
-#             with open(output_path, "w", encoding="utf-8") as f:
-#                 f.write(full_content)
-#             file_type = "TXT"
-            
-#         return f"Document '{document_name}' has been exported to {file_type} format at: {output_path}"
-        
-#     except Exception as e:
-#         print(f"Error in download_document: {str(e)}")
-#         print(traceback.format_exc())
-#         return f"Error exporting document: {str(e)}"
+
 
 @mcp.tool()
 def download_document(
@@ -571,7 +490,85 @@ def download_document(
         print(traceback.format_exc())
         return f"Error exporting document: {str(e)}"
 
-
+@mcp.tool()
+def voice_to_doc_search(
+    collection_name: Annotated[str, "Name of the Qdrant collection to search"],
+    document_name: Annotated[str, "Name of the document to search within"],
+    limit: Annotated[int, "Maximum number of results to return"] = 3
+) -> dict:
+    """
+    Captures voice input and uses it to search within a specified document.
+    Returns the most relevant text chunks from the document.
+    """
+    try:
+        # Initialize speech recognizer
+        recognizer = sr.Recognizer()
+        
+        # Capture audio from microphone
+        with sr.Microphone() as source:
+            print("Speak now.")
+            # Adjust for ambient noise
+            recognizer.adjust_for_ambient_noise(source, duration=1)
+            # Record audio
+            audio = recognizer.listen(source, timeout=5)
+            print("Voice captured.")
+        
+        # Convert speech to text
+        query = recognizer.recognize_google(audio)
+        print(f"Search query: '{query}'")
+        
+        # Initialize Qdrant client
+        qdrant_client = QdrantClient(
+            url=os.getenv("QDRANT_URL"),
+            api_key=os.getenv("QDRANT_API_KEY")
+        )
+        
+        # Create query vector
+        query_vector = encode_text(query)
+        
+        # Create filter for specific document
+        document_filter = Filter(
+            must=[
+                FieldCondition(
+                    key="document_name",
+                    match=MatchValue(value=document_name)
+                )
+            ]
+        )
+        
+        # Perform search
+        results = qdrant_client.search(
+            collection_name=collection_name,
+            query_vector=query_vector,
+            limit=limit,
+            with_payload=True,
+            query_filter=document_filter
+        )
+        
+        # Format results
+        search_results = []
+        for point in results:
+            search_results.append({
+                "score": round(point.score, 4),
+                "text": point.payload.get("text", ""),
+                "document_name": point.payload.get("document_name", "unknown")
+            })
+        
+        return {
+            "voice_query": query,
+            "document": document_name,
+            "collection": collection_name,
+            "results": search_results
+        }
+    
+    except sr.RequestError as e:
+        return {"error": f"Speech recognition service error: {str(e)}"}
+    except sr.UnknownValueError:
+        return {"error": "Unable to recognize speech"}
+    except Exception as e:
+        print(f"Error in voice_to_doc_search: {str(e)}")
+        print(traceback.format_exc())
+        return {"error": f"Search failed: {str(e)}"}
 
 # Run the MCP server
 if __name__ == "__main__":
